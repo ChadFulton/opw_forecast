@@ -1,0 +1,1 @@
+cpdef rtnorm(shape, double a, double b, double mu, double sigma)
