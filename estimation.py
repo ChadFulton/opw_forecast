@@ -80,44 +80,10 @@ class OPWModel(object):
             gamma_star_str, self.cache
         )
 
-        """
-        x_g = self.exog[:,np.array(gamma, bool)]
-        V_POST = np.eye(x_g.shape[0]) + self.sigma2*x_g.dot(x_g.T)
-
-        print '->',stats.multivariate_normal.logpdf(y, np.zeros(x_g.shape[0]), V_POST)
-
-        print simulate.ln_mn_mass(gamma_star[1:])
-        print simulate.ln_mn_mass(gamma[1:])
-
-        a = simulate.ln_mvn_density(
-            self.M0, self.sigma2, y,
-            np.asfortranarray(self.exog[:,np.array(gamma_star, bool)]),
-            self.work_mvn,
-            gamma_star_str, self.cache
-        )-np.log((2*np.pi)**(x_g.shape[0]/2))
-        aa = simulate.ln_mn_mass(gamma_star[1:])
-        b = simulate.ln_mvn_density(
-            self.M0, self.sigma2, y,
-            np.asfortranarray(self.exog[:,np.array(gamma, bool)]),
-            self.work_mvn,
-            gamma_str, self.cache
-        )-np.log((2*np.pi)**(x_g.shape[0]/2))
-        bb = simulate.ln_mn_mass(gamma[1:])
-
-        print numer - denom
-        print (a + aa) - (b + bb)
-        print '>>'
-        print np.exp(numer - denom)
-
-        raise Exception()
-        """
-
         return np.exp(numer - denom)
 
     def sample(self, rho, gamma, y_rvs, gamma_rvs, rho_rvs, comparator):
         # 1. Gibbs step: draw y
-        #print rho[gamma.astype(bool)]
-        #print y_rvs.T
         y = simulate.draw_y(rho[gamma.astype(bool)], self.endog, np.asfortranarray(self.exog[:,gamma.astype(bool)]), y_rvs)
 
         # 2. Metropolis step: draw gamma and rho
@@ -134,37 +100,23 @@ class OPWModel(object):
             prob_accept = 1
 
         # Update the arrays based on acceptance or not
-        rho = rho.copy()
+        #rho = rho.copy()
         accept = prob_accept >= comparator
         #print accept, prob_accept, comparator
         if accept:
+            rho = np.zeros(rho.shape)
             gamma = gamma_star.copy()
             # Draw rho
             mask = gamma.astype(bool)
             k_gamma = np.sum(gamma)
-
-            """
-            x_g = self.exog[:,mask]
-            V_ = np.eye(x_g.shape[1])*self.sigma2
-            vc = np.linalg.inv(np.linalg.inv(V_) + x_g.T.dot(x_g))
-            beta_mean = vc.dot(x_g.T.dot(y))
-            c = np.linalg.cholesky(vc)
-            print beta_mean + c.dot(rho_rvs[0:2])
-            print 
-            print '----'
-            """
-
-            simulate.draw_rho(
-                np.asfortranarray(self.M0s[:k_gamma,:k_gamma]),
-                y, np.asfortranarray(self.exog[:,mask]),
-                rho_rvs, self.work_rho
-            )
 
             rho[mask] = simulate.draw_rho(
                 np.asfortranarray(self.M0s[:k_gamma,:k_gamma]),
                 y, np.asfortranarray(self.exog[:,mask]),
                 rho_rvs, self.work_rho
             )
+        else:
+            rho = rho.copy()
         
         return y, gamma, rho, accept 
 
@@ -241,6 +193,8 @@ class OPWEstimate(object):
                 self.rhos[:,t-1], self.gammas[:,t-1], self.y_rvs[:,:,l],
                 self.gamma_rvs[t-1], self.rho_rvs[:,t-1], self.comparators[t-1]
             )
+
+            #print t, self.accepts[t], '-------------'
 
             # Report progress
             if print_progress and t % print_mod == 0:
