@@ -217,6 +217,8 @@ class OPWResult(object):
         self._burn = None
         self._yhat = None
         self._probabilities = None
+        self._parameters_summary = None
+        self._periods_summary = None
 
         if update:
             self.update()
@@ -227,6 +229,8 @@ class OPWResult(object):
         self._burn = self.estimator.burn_draws+1
         self._yhat = None
         self._probabilities = None
+        self._parameters_summary = None
+        self._periods_summary = None
 
     @property
     def accepts(self):
@@ -317,6 +321,37 @@ class OPWResult(object):
         # Only interested in sizes for drawn models
         return self.estimator.gammas[1:,self._burn:].sum(0)
 
+    @property
+    def parameters_summary(self):
+        if self._parameters_summary is None:
+            self._parameters_summary = pd.DataFrame({
+                'Post. Mean': self.estimates.mean(1),
+                'Post. Median': np.median(self.estimates, 1),
+                'Post. Std.': self.estimates.std(1),
+                'N Inc.': self.inclusions.sum(1),
+                'Prob. Inc.': self.inclusions.sum(1) / self.converged
+            }, columns = ['Post. Mean', 'Post. Median', 'Post. Std.', 'Prob. Inc.', 'N Inc.'],
+            index=self.data.exog_names)
+        return self._parameters_summary
+
+    @property
+    def periods_summary(self):
+        if self._periods_summary is None:
+            self._periods_summary = pd.DataFrame({
+                'Rec.': self.endog,
+                'Rec. Prob.': self.probabilities.mean(1)
+            }, index=self.data.index[5:])
+        return self._periods_summary
+
+    def graph_probabilities(self, ax=None):
+        if ax is None:
+            fig, ax = plt.subplots()
+        
+        ax.plot(self.periods_summary.index, self.periods_summary.ix[:,'Rec. Prob.'], 'k', alpha=0.8)
+        ax.fill_between(self.periods_summary.index, self.periods_summary.ix[:,'Rec.'], color='k', alpha=0.2);
+
+        return ax
+
     def graph_inclusion(self, ax=None):
         # Start graphing at the zeroth model (i.e. before the first draw)
         if ax is None:
@@ -333,3 +368,5 @@ class OPWResult(object):
         ax.xaxis.set_ticklabels(self.data.exog_names, rotation=90)
         ax.set(xlim=(-1, self.model.n),
                xlabel='Predictor', ylabel='Iteration');
+
+        return ax
