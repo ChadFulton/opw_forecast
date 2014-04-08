@@ -300,6 +300,7 @@ class OPWResult(object):
     @property
     def probabilities(self):
         if self._probabilities is None:
+            self.yhat # make sure yhat has been calculated
             self._probabilities = stats.norm.cdf(self._yhat)
         # Only interested in probabilities for drawn models
         return self._probabilities[:,self._burn:]
