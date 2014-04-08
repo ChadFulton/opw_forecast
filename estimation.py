@@ -205,7 +205,7 @@ class OPWEstimate(object):
     def draw_rvs_rho(self):
         return np.random.multivariate_normal(
             mean=np.zeros(self.model.n),
-            cov=np.eye(self.model.n)*self.model.sigma2,
+            cov=np.eye(self.model.n),
             size=(self.iterations,)
         ).T
 
