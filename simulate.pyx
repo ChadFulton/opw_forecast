@@ -379,7 +379,7 @@ cpdef draw_y(double [:] rho,       # k_gamma x 0
                     _rvs = np.random.normal(size=(I,))
                     i = 0
                 # Set new value
-                y[t] = xB[t] + rvs[t,i]
+                y[t] = xB[t] + _rvs[i]
                 
         elif s[t] == 0 and y[t] > 0:
             dcopy(&I, &rvs[t,0], &T_h, &_rvs[0], &inc)
@@ -397,7 +397,7 @@ cpdef draw_y(double [:] rho,       # k_gamma x 0
                     _rvs = np.random.normal(size=(I,))
                     i = 0
                 # Set new value
-                y[t] = xB[t] + rvs[t,i]
+                y[t] = xB[t] + _rvs[i]
     return y
 
 cpdef mh(s, x, G0, G, h, sigma2=10):
