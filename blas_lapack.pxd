@@ -105,6 +105,36 @@ ctypedef int spotrf_t(
     int *info      # 0 if success, otherwise an error code (integer)
 )
 
+ctypedef int dtrtrs_t(
+    # op( A )*X = B
+    # Compute C := alpha*A*B + beta*C,
+    char *uplo,    # {'U','L'} is A upper or lower triangular
+    char *trans,   # {'N','T','C'} specifies op(A)
+    char *diag,    # {'U','N'} is A unit triangular?
+    int *n,        # order of A
+    int *nrhs,     # columns of B
+    double *a,     # Matrix A: lda x n
+    int *lda,      # The size of the first dimension of A (in memory)
+    double *b,     # Matrix B: ldb x NRHS
+    int *ldb,      # The size of the first dimension of B (in memory)
+    int *info,     # 0 if success, otherwise an error code (integer)
+)
+
+ctypedef int dtrsm_t(
+    # op( A )*X = alpha*B, or X*op( A ) = alpha*B,
+    # Compute C := alpha*A*B + beta*C,
+    char *side,    # {'L','R'} does op(A) left or right multiply X
+    char *uplo,    # {'U','L'} is A upper or lower triangular
+    char *trans,   # {'N','T','C'} specifies op(A)
+    char *diag,    # {'U','N'} is A unit triangular?
+    int *m,        # rows of B
+    int *n,        # columns of B
+    double *alpha, # Scalar multiple
+    double *a,     # Matrix A:
+    int *lda,      # The size of the first dimension of A (in memory)
+    double *b,     # Matrix B: mxn
+    int *ldb,      # The size of the first dimension of B (in memory)
+)
 
 ctypedef int dsymm_t(
     # Compute C := alpha*A*B + beta*C,

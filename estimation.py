@@ -66,14 +66,14 @@ class OPWModel(object):
         gamma_str = self.tostring(gamma)
         gamma_star_str = self.tostring(gamma_star)
 
-        denom = simulate.ln_mn_mass(gamma[1:]) + simulate.ln_mvn_density(
+        denom = simulate.ln_mn_mass(gamma[1:]) + simulate.ln_mvn_density_ch(
             self.M0, self.sigma2, y,
             np.asfortranarray(self.exog[:,np.array(gamma, bool)]),
             self.work_mvn,
             gamma_str, self.cache
         )
 
-        numer = simulate.ln_mn_mass(gamma_star[1:]) + simulate.ln_mvn_density(
+        numer = simulate.ln_mn_mass(gamma_star[1:]) + simulate.ln_mvn_density_ch(
             self.M0, self.sigma2, y,
             np.asfortranarray(self.exog[:,np.array(gamma_star, bool)]),
             self.work_mvn,

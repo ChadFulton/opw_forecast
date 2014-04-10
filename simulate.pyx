@@ -21,6 +21,7 @@ cdef dgemv_t *dgemv = <dgemv_t*>PyCObject_AsVoidPtr(scipy.linalg.blas.dgemv._cpo
 cdef dcopy_t *dcopy = <dcopy_t*>PyCObject_AsVoidPtr(scipy.linalg.blas.dcopy._cpointer)
 cdef daxpy_t *daxpy = <daxpy_t*>PyCObject_AsVoidPtr(scipy.linalg.blas.daxpy._cpointer)
 cdef ddot_t *ddot = <ddot_t*>PyCObject_AsVoidPtr(scipy.linalg.blas.ddot._cpointer)
+cdef dtrtrs_t *dtrtrs = <dtrtrs_t*>PyCObject_AsVoidPtr(scipy.linalg.lapack.dtrtrs._cpointer)
 cdef dgetrf_t *dgetrf = <dgetrf_t*>PyCObject_AsVoidPtr(scipy.linalg.lapack.dgetrf._cpointer)
 cdef dgetri_t *dgetri = <dgetri_t*>PyCObject_AsVoidPtr(scipy.linalg.lapack.dgetri._cpointer)
 cdef dpotrf_t *dpotrf = <dpotrf_t*>PyCObject_AsVoidPtr(scipy.linalg.lapack.dpotrf._cpointer)
@@ -189,7 +190,7 @@ cpdef int get_mvn_density_NB(double [::1, :] M0,   # T-h x T-h
 
     return <int>work[0,0]
 
-cpdef mvn_density(double [::1, :] M0,   # T-h x T-h
+cpdef mvn_density_lu(double [::1, :] M0,   # T-h x T-h
                          double sigma2,
                          double [:] endog,     # T-h x 0
                          double [::1,:] exog,  # T-h x k_gamma
@@ -256,7 +257,7 @@ cpdef mvn_density(double [::1, :] M0,   # T-h x T-h
 
     return exp(-0.5*ddot(&T_h, &endog[0], &inc, &tmp[0], &inc))/sqrt(det)
 
-cpdef ln_mvn_density(double [::1, :] M0,   # T-h x T-h
+cpdef ln_mvn_density_lu(double [::1, :] M0,   # T-h x T-h
                          double sigma2,
                          double [:] endog,     # T-h x 0
                          double [::1,:] exog,  # T-h x k_gamma
@@ -322,6 +323,73 @@ cpdef ln_mvn_density(double [::1, :] M0,   # T-h x T-h
     dsymv("U", &T_h, &alpha, &Sigma[0,0], &T_h, &endog[0], &inc, &beta, &tmp[0], &inc)
 
     return - 0.5*log(det) - 0.5*ddot(&T_h, &endog[0], &inc, &tmp[0], &inc)
+
+cpdef ln_mvn_density_ch(double [::1, :] M0,   # T-h x T-h
+                         double sigma2,
+                         double [:] endog,     # T-h x 0
+                         double [::1,:] exog,  # T-h x k_gamma
+                         double [::1,:] work,  # T-h x k_gamma
+                         key, cache):
+    cdef:
+        int T_h = exog.shape[0]
+        int T_h2 = T_h**2
+        int k_gamma = exog.shape[1] # in terms of OPW this value is k_gamma+1
+    cdef:
+        double [::1, :] Sigma
+        double [:] tmp
+        double val
+    cdef:
+        double alpha = 1.0
+        double beta = 0.0
+        double delta = -1.0
+        int inc = 1
+    cdef:
+        #double [::1,:] work
+        int [::1,:] ipiv
+        #int lwork = T_h*NB   # dimension of work array for dgetri
+        int lwork = work.shape[0]
+        int info
+        double det
+        int i
+    
+    Sigma = np.empty((T_h,T_h), float, order="F")
+    tmp = np.empty((T_h,), float, order="F")
+    #work = np.empty((lwork,lwork), float, order="F")
+    ipiv = np.zeros((T_h,T_h), np.int32, order="F")
+
+    # Sigma = M0
+    dcopy(&T_h2, &M0[0,0], &inc, &Sigma[0,0], &inc)
+
+    # Sigma = (np.eye(exog.shape[0]) + sigma2*exog.dot(exog.T))/sigma2
+    #       = Sigma + sigma2*exog.dot(exog.T)
+    dgemm("N", "T", &T_h, &T_h, &k_gamma, &sigma2, &exog[0,0], &T_h, &exog[0,0], &T_h, &alpha, &Sigma[0,0], &T_h)
+    
+    if key in cache:
+        Sigma = cache[key]['Sigma']
+        det = cache[key]['det']
+        cache[key]['count'] += 1
+    else:
+        # Cholesky decomposition
+        dpotrf("L", &T_h, &Sigma[0,0], &T_h, &info)
+        for i in range(T_h):
+            for j in range(i+1,T_h):
+                Sigma[i,j] = 0
+        # Determinant
+        det = 1
+        for i in range(T_h):
+            det = det*Sigma[i,i]
+        det = det**2
+        cache[key] = {
+           'Sigma':Sigma,
+           'det':det,
+           'count':0
+        }
+    # tmp = endog
+    dcopy(&T_h, &endog[0], &inc, &tmp[0], &inc)
+    # Solve the linear system
+    dtrtrs('L', 'N', 'N', &T_h, &inc, &Sigma[0,0], &T_h, &tmp[0], &T_h, &info)
+    
+    return - 0.5*log(det) - 0.5*ddot(&T_h, &tmp[0], &inc, &tmp[0], &inc)
 
 cpdef mn_mass(gamma):
     return 1/comb(gamma.shape[0], np.sum(gamma))
