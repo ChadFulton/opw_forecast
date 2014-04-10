@@ -82,7 +82,7 @@ class OPWData(pd.DataFrame):
 
     @property
     def exog(self):
-        return self.get_exog_array(h=1)
+        return self.get_exog_array(lag=1)
 
     @property
     def endog_names(self):
