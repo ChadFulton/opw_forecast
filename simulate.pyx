@@ -3,7 +3,7 @@ from scipy.misc import comb
 from scipy import stats
 cimport numpy as np
 cimport cython
-from rtnorm.pyrtnorm import rtnorm
+#from rtnorm.pyrtnorm import rtnorm
 
 from cpython cimport PyCObject_AsVoidPtr
 import scipy
@@ -439,8 +439,8 @@ cpdef draw_y(double [:] rho,       # k_gamma x 0
                 j += 1
                 # If we're not moving, just draw from the truncated normal
                 if j > 50:
-                    #y[t] = stats.truncnorm.rvs(-xB[t], np.Inf, loc=xB[t])
-                    y[t] = rtnorm((1,), 0, np.Inf, xB[t], 1)
+                    y[t] = stats.truncnorm.rvs(-xB[t], np.Inf, loc=xB[t])
+                    #y[t] = rtnorm((1,), 0, np.Inf, xB[t], 1)
                     continue
                 # Make sure we have enough variates
                 if i == I:
@@ -457,8 +457,8 @@ cpdef draw_y(double [:] rho,       # k_gamma x 0
                 j += 1
                 # If we're not moving, just draw from the truncated normal
                 if j > 50:
-                    #y[t] = stats.truncnorm.rvs(-np.Inf, -xB[t], loc=xB[t])
-                    y[t] = rtnorm((1,), -np.Inf, 0, xB[t], 1)
+                    y[t] = stats.truncnorm.rvs(-np.Inf, -xB[t], loc=xB[t])
+                    #y[t] = rtnorm((1,), -np.Inf, 0, xB[t], 1)
                     continue
                 # Make sure we have enough variates
                 if i == I:
