@@ -1,0 +1,374 @@
+/****************************************************/
+/* Probit forecasting model with variable selection */
+/* Model will predict whether month t+1 will be     */
+/* a recession month using information available    */
+/* at the end of month t.                           */
+/* Based on Owyang, Piger and Wall (2013)           */
+/****************************************************/
+
+new;
+cls;
+
+format /m1 /rd 14,2;
+
+time_start = date;
+
+rndseed 123456;
+
+ /* Load Dataset */
+
+@data = xlsreadM("recession probit data.xlsx","a2:bf619",1,0);@
+load data[618,58] = "recession probit data.csv";
+
+t_all = rows(data);
+date_vec=data[4:t_all,1];
+s=data[4:t_all,2];
+ff=data[4:t_all,3];
+sp500_return=((data[4:t_all,4]./data[1:t_all-3,4])-1)*100;
+term_spread=data[4:t_all,5]-data[4:t_all,6];
+agg_emp_growth=((data[4:t_all,7]./data[1:t_all-3,7])-1)*100;
+agg_ip_growth=((data[4:t_all,8]./data[1:t_all-3,8])-1)*100;
+state_emp_growth=((data[4:t_all,9:cols(data)]./data[1:t_all-3,9:cols(data)])-1)*100;
+
+t_all = rows(s);
+
+/* Construct data matrices and initialize storage spaces */
+
+s = s[3:t_all]; @ NBER Recession Indicator. This is the left hand side variable. @
+
+date_vec = date_vec[3:t_all];
+
+ff = ff[2:t_all-1]; @ Federal Funds Rate @
+sp500_return = sp500_return[2:t_all-1]; @ S&P 500 Return @
+term_spread = term_spread[2:t_all-1]; @ Term Spread @
+
+agg_emp_growth = agg_emp_growth[1:t_all-2]; @ Aggregate Employment Growth @
+agg_ip_growth = agg_ip_growth[1:t_all-2]; @ Aggregate Industrial Production Growth @
+
+state_emp_growth = state_emp_growth[1:t_all-2,.]; @ State Employment Growth @
+
+x = ff~sp500_return~term_spread~agg_emp_growth~agg_ip_growth~state_emp_growth;
+
+T = rows(x);
+
+k_total = cols(x);
+
+choose_vec = zeros(k_total,1);
+
+beta_mat = zeros(k_total+1,1);
+prob_vec = zeros(t,1);
+
+/* Priors */
+
+@ f(Beta|model) is N(0,V_).  V_ is set equal to sigma^2*I_K, 
+where K is the number of regressors in that model; @
+
+sigma2 = 10;
+
+@ model prior probability is proportional to 1/N(ki), where ki is the number of regressors 
+(not including the intercept) in model i, and N(ki) is the number of models with ki regressors. @ 
+
+
+/* Number of simulations */
+
+num_sim =  400;
+num_conv = 200;
+
+
+/* Initialize draws */
+
+x_indic_g = zeros(k_total,1);  /* Draw of which predictors belong in the model */
+
+count_x_g = selif(seqa(1,1,k_total),x_indic_g.==1);
+
+beta_g = zeros(1+sumc(x_indic_g),1);
+
+
+/* Begin Simulations */
+
+sim = 1;
+do until sim>num_sim;
+
+@print every 100th simulation number@
+if fmod(sim,100)==0;
+cls;
+sim;
+endif;
+
+@Draw y, model indicator, and parameter vector@
+
+y_g = gen_y;  /* This is the latent variable in the probit */
+
+{x_indic_g, beta_g} = gen_xb;
+
+count_x_g = selif(seqa(1,1,k_total),x_indic_g.==1);
+
+@ Store Results @
+if sim>num_conv;
+
+ choose_vec = choose_vec + x_indic_g;
+ 
+ beta_mat_temp = zeros(k_total,1);
+ 
+ if ismiss(count_x_g) /= 1;
+ 
+  beta_mat_temp[count_x_g] = beta_g[2:rows(beta_g)];
+ 
+ endif;
+
+ beta_mat = beta_mat + (beta_g[1]|beta_mat_temp);
+
+ x_temp = ones(T,1)~x[.,count_x_g'];
+
+ prob_vec_temp = cdfn(x_temp*beta_g);
+ prob_vec = prob_vec + prob_vec_temp;
+ 
+ indic_vec_temp = (prob_vec_temp.>=0.5);
+ 
+endif;
+ 
+ sim=sim+1;
+endo;
+
+cls;
+
+output file = recession_probit_in_sample_output.txt reset;
+
+"Data is Monthly";
+
+"";
+
+"Assumption is that inferences are formed at the end of month t";
+
+"Objective is to forecast the recession indicator at month t + 1";
+
+"";
+
+"Number of draws to convergence = ";; num_conv;
+"Number of draws after convergence = ";; (num_sim-num_conv);
+
+"";
+
+"Models receive prior weight proportional to 1/N(ki), where ki is the number of regressors (not including the intercept) in model i, and N(ki) is the
+number of models with ki regressors.";
+
+"";
+
+"Prior VC matrix for model parameters is ";; sigma2;;
+
+"";
+
+"Average Model Size";
+sumc(choose_vec)/(num_sim-num_conv);
+
+"";
+
+"Explanatory Variable Inclusion Probabilities";
+seqa(1,1,k_total)~choose_vec/(num_sim-num_conv);
+
+"";
+
+ "Posterior Mean of Beta_j, Conditional on x_j being in Model.";
+ "Third Columns is Number of Times x_j was in Model";
+ "First Row is Intercept";
+ 
+ 0~(beta_mat[1]./(num_sim-num_conv));
+ seqa(1,1,k_total)~(beta_mat[2:k_total+1]./choose_vec)~choose_vec;
+
+output off;
+
+output file = recession_probabilities_in_sample.txt reset;
+date_vec~s~(prob_vec./(num_sim-num_conv));
+output off;
+
+time_end=date;
+
+"Number of seconds elapsed to run program: ";; ethsec(time_start,time_end)/100;
+
+"Number of minutes elapsed to run program: ";; ethsec(time_start,time_end)/(100*60);
+
+end;
+
+
+@=====================================================@
+@=====================================================@
+
+proc gen_y;
+local y_p, x_g, y_p_temp, indx_temp, jjj, y_mean, y_p_indic, correct_indic, 
+      incorrect_indic, y_mean_temp, indic_temp;
+
+x_g = ones(T,1);
+
+if ismiss(count_x_g) ne 1;
+	
+ x_g = x_g~x[.,count_x_g'];
+
+endif;
+
+y_mean = x_g*beta_g;
+
+y_p = rndn(T,1) + y_mean;
+
+y_p_indic = (y_p .> 0);
+
+correct_indic = (s.==y_p_indic);
+
+y_p = y_p.*correct_indic;
+
+incorrect_indic = (s./=y_p_indic);
+
+do while sumc(incorrect_indic)/=0;
+    
+y_mean_temp = selif(y_mean, incorrect_indic);
+
+y_p_temp = rndn(sumc(incorrect_indic),1) + y_mean_temp;
+
+indic_temp = selif(seqa(1,1,rows(y_p)),incorrect_indic);
+y_p[indic_temp] = y_p_temp;
+
+y_p_indic = (y_p .> 0);
+
+correct_indic = (s.==y_p_indic);
+
+y_p = y_p.*correct_indic;
+
+incorrect_indic = (s./=y_p_indic);
+
+endo;
+
+retp(y_p);
+endp;
+
+@=====================================================@
+
+proc(2) = gen_xb;
+local ln_fy_g, num_mod_current, num_mod_diff, num_mod, gen_c, 
+x_indic_prop, ln_fy_prop, ln_model_prop, ln_model_g, k_prop, 
+Nk_prop, k_g, Nk_g, prob_acc, u, x_indic_new, beta_new;
+
+/* Compute Marginal Likelihood for Current Model */
+
+ln_fy_g = log_marg_lik(x_indic_g);
+
+
+/* Generate Proposal Model */
+
+num_mod_current = 1;  @ current model @
+
+num_mod_diff = k_total;  
+
+num_mod = num_mod_current + num_mod_diff;
+
+gen_c = ceil(rndu(1,1)*num_mod);
+
+if gen_c==1;
+
+ x_indic_prop = x_indic_g;
+
+else;
+
+ gen_c = gen_c-num_mod_current;
+
+  if x_indic_g[gen_c]==1;
+  
+   x_indic_prop = x_indic_g;
+   x_indic_prop[gen_c]=0;
+
+  else;
+  
+   x_indic_prop = x_indic_g;
+   x_indic_prop[gen_c]=1;
+
+ endif;
+
+endif;
+
+/* Compute Marginal Likelihood for Proposed Model */
+
+ln_fy_prop = log_marg_lik(x_indic_prop);
+
+
+/* Metropolis Step */
+
+ k_prop = sumc(x_indic_prop);
+ Nk_prop = exp(lnfact(k_total)-lnfact(k_prop)-lnfact(k_total-k_prop));
+ ln_model_prop = ln(1/Nk_prop);
+ k_g = sumc(x_indic_g);
+ Nk_g = exp(lnfact(k_total)-lnfact(k_g)-lnfact(k_total-k_g));
+ ln_model_g = ln(1/Nk_g);
+
+prob_acc = minc(exp((ln_fy_prop+ln_model_prop)-(ln_fy_g+ln_model_g))|1);
+
+u = rndu(1,1);
+
+if u<=prob_acc;
+
+x_indic_new = x_indic_prop;
+
+beta_new = gen_beta(x_indic_new);
+
+else;
+
+x_indic_new = x_indic_g;
+beta_new = beta_g;
+
+endif;
+
+retp(x_indic_new, beta_new);
+endp;
+
+
+@=====================================================@
+
+proc gen_beta(model_ind);
+local x_g, jjj, V_, vc, beta_mean, c, beta_new;
+
+x_g = ones(T,1);
+
+jjj = 1;
+do until jjj>k_total;
+
+if model_ind[jjj]==1;
+x_g = x_g~x[.,jjj];
+endif;
+
+jjj=jjj+1;
+endo;
+
+ V_ = eye(cols(x_g))*sigma2;
+
+vc = inv(inv(V_) + (x_g'x_g));
+beta_mean =  vc*(x_g'y_g);
+c = chol(vc);
+
+beta_new = beta_mean + c'rndn(cols(x_g),1);
+
+retp(beta_new);
+endp;
+
+
+@=====================================================@
+
+proc log_marg_lik(model_ind);
+local x_g, jjj, V_, V_POST, ln_fy;
+
+x_g = ones(T,1);
+
+jjj = 1;
+do until jjj>k_total;
+
+if model_ind[jjj]==1;
+x_g = x_g~x[.,jjj];
+endif;
+
+jjj=jjj+1;
+endo;
+
+ V_ = eye(cols(x_g))*sigma2;
+
+V_POST = eye(T) + x_g*V_*x_g';
+
+ln_fy = lnpdfmvn(y_g,v_post);
+
+retp(ln_fy);
+endp;
