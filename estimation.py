@@ -61,9 +61,6 @@ class OPWModel(object):
         return ''.join(['1' if value else '0' for value in array])
 
     def accept(self, y, gamma, gamma_star):
-        k_gamma = np.sum(gamma)
-        k_gamma_star = np.sum(gamma_star)
-
         gamma_str = self.tostring(gamma)
         gamma_star_str = self.tostring(gamma_star)
 
@@ -340,13 +337,11 @@ class OPWResult(object):
             self._parameters_summary = pd.DataFrame(
                 {
                     'Post. Mean': self.estimates.mean(1),
-                    'Post. Median': np.median(self.estimates, 1),
                     'Post. Std.': self.estimates.std(1),
                     'N Inc.': self.inclusions.sum(1),
                     'Prob. Inc.': self.inclusions.sum(1) / self.converged
                 },
-                columns=['Post. Mean', 'Post. Median',
-                         'Post. Std.', 'Prob. Inc.', 'N Inc.'],
+                columns=['Post. Mean', 'Post. Std.', 'Prob. Inc.', 'N Inc.'],
                 index=self.data.exog_names
             )
         return self._parameters_summary
@@ -374,6 +369,16 @@ class OPWResult(object):
         )
 
         return ax
+
+    def hist_posterior(self, axes=None):
+        k = self.estimates.shape[0]
+        if axes is None:
+            fig, axes = plt.subplots(k // 4, 4)
+        for i in range(k):
+            ax = axes[i//4, i % 4]
+            ax.hist(self.estimates[i, :].compressed())
+            ax.set(title=self.data.exog_names[i])
+        return axes
 
     def graph_inclusion(self, ax=None):
         # Start graphing at the zeroth model (i.e. before the first draw)
