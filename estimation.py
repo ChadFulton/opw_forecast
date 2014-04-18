@@ -377,10 +377,9 @@ class OPWResult(object):
         for i in range(k):
             ax = axes[i//4, i % 4]
             values = self.estimates[i, :].compressed()
-            ax.hist(values)
-            ax.set(title='%s (N=%d)' % (
-                self.data.exog_names[i], values.shape[0]
-            ))
+            inclusions = values.shape[0]
+            ax.hist(values, alpha=(inclusions/self.converged)**0.2)
+            ax.set(title='%s (N=%d)' % (self.data.exog_names[i], inclusions))
         return axes
 
     def graph_inclusion(self, ax=None):
