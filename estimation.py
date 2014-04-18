@@ -376,8 +376,11 @@ class OPWResult(object):
             fig, axes = plt.subplots(k // 4, 4)
         for i in range(k):
             ax = axes[i//4, i % 4]
-            ax.hist(self.estimates[i, :].compressed())
-            ax.set(title=self.data.exog_names[i])
+            values = self.estimates[i, :].compressed()
+            ax.hist(values)
+            ax.set(title='%s (N=%d)' % (
+                self.data.exog_names[i], values.shape[0]
+            ))
         return axes
 
     def graph_inclusion(self, ax=None):
