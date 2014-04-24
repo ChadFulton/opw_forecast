@@ -13,25 +13,27 @@ import results_piger
 from numpy.testing import assert_allclose, assert_almost_equal
 from nose.exc import SkipTest
 
+
 class OPWReplication(estimation.OPWEstimate):
     def __init__(self, clip=0, lag=1, sigma2=10, burn_draws=0,
                  converged_draws=20, truncnorm_redraw=1, truncnorm_perdraw=1):
         # Data
         raw = pd.read_excel('data/recession probit data.xlsx',
                             'nber_indicator.csv')
-        df = data.OPWData(raw.ix[:raw.shape[0]-clip,:])
+        df = data.OPWData(raw.ix[:raw.shape[0]-clip, :])
 
         # Model
         model = estimation.OPWModel(df, lag=lag, sigma2=sigma2)
 
         # Initialize
         super(OPWReplication, self).__init__(model,
-            burn_draws=0, converged_draws=20, truncnorm_redraw=1,
-            truncnorm_perdraw=1
-        )
+                                             burn_draws=0, converged_draws=20,
+                                             truncnorm_redraw=1,
+                                             truncnorm_perdraw=1)
 
         # Run the model
         self.draw(print_progress=False)
+
 
 class TestSimple(OPWReplication):
     def __init__(self):
@@ -49,11 +51,11 @@ class TestSimple(OPWReplication):
         return np.array(self.true['gamma_rvs'], order="F")-1
 
     def draw_rvs_y(self, shape):
-        return np.asfortranarray(np.array(self.true['y_rvs']).T[:,None,:])
+        return np.asfortranarray(np.array(self.true['y_rvs']).T[:, None, :])
 
     def test_gamma(self):
         assert_almost_equal(
-            self.results.selectors.T[:,1:],
+            self.results.selectors.T[:, 1:],
             self.true['gammas'],
             5
         )
