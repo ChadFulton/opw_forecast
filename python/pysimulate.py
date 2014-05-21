@@ -7,7 +7,7 @@ import time
 np.set_printoptions(precision=5, suppress=True)
 
 
-def get_data():
+def get_data(lag):
     # Data
     data = pd.read_excel('data/recession probit data.xlsx',
                          'nber_indicator.csv')
@@ -70,7 +70,7 @@ def ln_mvn_density(M0, sigma2, y, exog, cache_key):
         det = ln_mvn_density.cache[cache_key]['det']
         ln_mvn_density.cache[cache_key]['count'] += 1
     else:
-        Sigma = M0 + sigma2*exog.dot(exog.T)
+        Sigma = np.linalg.inv(M0 + sigma2*exog.dot(exog.T))
         det = np.linalg.det(Sigma)
         if cache_key is not None:
             ln_mvn_density.cache[cache_key] = {
@@ -79,7 +79,7 @@ def ln_mvn_density(M0, sigma2, y, exog, cache_key):
                 'count': 0
             }
 
-    return -0.5*np.log(det) - 0.5*y.dot(np.linalg.inv(Sigma).dot(y))
+    return -0.5*np.log(det) - 0.5*y.dot(Sigma.dot(y))
 ln_mvn_density.cache = {}
 
 
@@ -187,7 +187,7 @@ def draw_rvs_y(T, shape):
 
 
 # MH Functions
-def calculate_accept(y, exog, M0, gamma, gamma_star, use_cholesky, use_cache):
+def calculate_accept(y, exog, M0, gamma, gamma_star, sigma2, use_cholesky, use_cache):
     gamma_indicators = np.array(gamma, bool)
     gamma_star_indicators = np.array(gamma_star, bool)
     cache_key = None
@@ -214,7 +214,7 @@ def calculate_accept(y, exog, M0, gamma, gamma_star, use_cholesky, use_cache):
 
 
 def sample(exog, endog, M0, M0s, rho, gamma, y_rvs, gamma_rvs, rho_rvs,
-           comparator, use_cholesky, use_cache):
+           comparator, sigma2, use_cholesky, use_cache):
     # 1. Gibbs step: draw y
     gamma_indicators = np.array(gamma, bool)
     y = draw_y(
@@ -227,7 +227,7 @@ def sample(exog, endog, M0, M0s, rho, gamma, y_rvs, gamma_rvs, rho_rvs,
     # Get the acceptance probability
     if gamma_rvs > 0:
         gamma_star = draw_gamma(gamma, gamma_rvs)
-        prob_accept = calculate_accept(y, exog, M0, gamma, gamma_star,
+        prob_accept = calculate_accept(y, exog, M0, gamma, gamma_star, sigma2,
                                        use_cholesky, use_cache)
     else:
         gamma_star = gamma
@@ -254,7 +254,7 @@ def sample(exog, endog, M0, M0s, rho, gamma, y_rvs, gamma_rvs, rho_rvs,
 
 
 # Metropolis Hastings Algorithm
-def mh(exog, endog, G0, G, sigma=10, print_pct=0, use_cholesky=True,
+def mh(exog, endog, G0, G, sigma2=10, print_pct=0, use_cholesky=True,
        use_cache=True):
     # Parameters
     T, n = exog.shape
@@ -289,7 +289,7 @@ def mh(exog, endog, G0, G, sigma=10, print_pct=0, use_cholesky=True,
         ys[:, t], gammas[:, t], rhos[:, t], accepts[t] = sample(
             exog, endog, M0, M0s,
             rhos[:, t-1], gammas[:, t-1], y_rvs[:, :, l],
-            gamma_rvs[t-1], rho_rvs[:, t-1], comparators[t-1],
+            gamma_rvs[t-1], rho_rvs[:, t-1], comparators[t-1], sigma2,
             use_cholesky, use_cache
         )
 
@@ -303,15 +303,15 @@ if __name__ == '__main__':
     np.random.seed(1234)
 
     # Estimation options
-    use_cholesky = False
-    use_cache = False
+    use_cholesky = True
+    use_cache = True
 
     # Model Parameters
     lag = 1
     sigma2 = 10
 
     # Data
-    endog, exog = get_data()
+    endog, exog = get_data(lag)
 
     start_time = time.time()  # timing
 
