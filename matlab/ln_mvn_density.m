@@ -7,7 +7,7 @@ function [density, cache] = ln_mvn_density(M0, sigma2, y, exog, ...
         cache.(key).count = cache.(cache_key).count + 1;
     else
         Sigma = inv(M0 + sigma2 * (exog * exog'));
-        determinant = det(Sigma);
+        determinant = 1/det(Sigma);
         
         cache.(cache_key) = struct;
         cache.(cache_key).Sigma = Sigma;

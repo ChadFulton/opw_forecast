@@ -71,7 +71,7 @@ def ln_mvn_density(M0, sigma2, y, exog, cache_key):
         ln_mvn_density.cache[cache_key]['count'] += 1
     else:
         Sigma = np.linalg.inv(M0 + sigma2*exog.dot(exog.T))
-        det = np.linalg.det(Sigma)
+        det = 1/np.linalg.det(Sigma)
         if cache_key is not None:
             ln_mvn_density.cache[cache_key] = {
                 'Sigma': Sigma,
