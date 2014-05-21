@@ -2,11 +2,13 @@ function [endog, exog] = get_data(lag, delta)
 
     data = xlsread('recession probit data.xlsx',1);
 
-    sp500_return   = (data(:, 4) ./ circshift(data(:, 4), delta) - 1) * 100;
+    growth_rate = @(data, delta) (data ./ circshift(data, delta) - 1) * 100;
+
+    sp500_return   = growth_rate(data(:, 4), delta);
     term_spread    = (data(:, 5) - data(:, 6));
-    agg_emp_growth = (data(:, 7) ./ circshift(data(:, 7), delta) - 1) * 100;
-    agg_ip_growth  = (data(:, 8) ./ circshift(data(:, 8), delta) - 1) * 100;
-    state_columns  = (data(:, 9:end) ./ circshift(data(:, 9:end), delta) - 1) * 100;
+    agg_emp_growth = growth_rate(data(:, 7), delta);
+    agg_ip_growth  = growth_rate(data(:, 8), delta);
+    state_columns  = growth_rate(data(:, 9:end), delta);
 
     growth_columns = circshift([ agg_emp_growth agg_ip_growth state_columns ], 1);
 
