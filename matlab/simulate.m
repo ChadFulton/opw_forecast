@@ -1,4 +1,4 @@
-%rng(1234);
+rng(1234);
 
 % Model Parameters
 lag = 1;
@@ -12,8 +12,8 @@ cache = struct;
 [endog, exog] = get_data(lag, delta);
 
 % Parameters
-G0 = 200;
-G = 200;
+G0 = 20000;
+G = 20000;
 
 tic();  % timing
 
