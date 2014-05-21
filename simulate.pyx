@@ -262,7 +262,7 @@ cpdef ln_mvn_density_lu(double [::1, :] M0,   # T-h x T-h
                          double [:] endog,     # T-h x 0
                          double [::1,:] exog,  # T-h x k_gamma
                          double [::1,:] work,  # T-h x k_gamma
-                         key, cache):
+                         key, cache, use_cache=True):
     cdef:
         int T_h = exog.shape[0]
         int T_h2 = T_h**2
@@ -290,7 +290,7 @@ cpdef ln_mvn_density_lu(double [::1, :] M0,   # T-h x T-h
     #work = np.empty((lwork,lwork), float, order="F")
     ipiv = np.zeros((T_h,T_h), np.int32, order="F")
 
-    if key in cache:
+    if use_cache and key in cache:
         Sigma = cache[key]['Sigma']
         det = cache[key]['det']
         cache[key]['count'] += 1
@@ -312,11 +312,12 @@ cpdef ln_mvn_density_lu(double [::1, :] M0,   # T-h x T-h
             else:
                 det *= Sigma[i,i]
         dgetri(&T_h, &Sigma[0,0], &T_h, &ipiv[0,0], &work[0,0], &lwork, &info)
-        cache[key] = {
-           'Sigma':Sigma,
-           'det':det,
-           'count':0
-        }
+        if use_cache:
+            cache[key] = {
+               'Sigma':Sigma,
+               'det':det,
+               'count':0
+            }
 
     # tmp = Sigma.dot(endog)
     #dgemv("N", &T_h, &T_h, &alpha, &Sigma[0,0], &T_h, &endog[0], &inc, &beta, &tmp[0], &inc)
@@ -329,7 +330,7 @@ cpdef ln_mvn_density_ch(double [::1, :] M0,   # T-h x T-h
                          double [:] endog,     # T-h x 0
                          double [::1,:] exog,  # T-h x k_gamma
                          double [::1,:] work,  # T-h x k_gamma
-                         key, cache):
+                         key, cache, use_cache=True):
     cdef:
         int T_h = exog.shape[0]
         int T_h2 = T_h**2
@@ -364,7 +365,7 @@ cpdef ln_mvn_density_ch(double [::1, :] M0,   # T-h x T-h
     #       = Sigma + sigma2*exog.dot(exog.T)
     dgemm("N", "T", &T_h, &T_h, &k_gamma, &sigma2, &exog[0,0], &T_h, &exog[0,0], &T_h, &alpha, &Sigma[0,0], &T_h)
     
-    if key in cache:
+    if use_cache and key in cache:
         Sigma = cache[key]['Sigma']
         det = cache[key]['det']
         cache[key]['count'] += 1
@@ -379,11 +380,12 @@ cpdef ln_mvn_density_ch(double [::1, :] M0,   # T-h x T-h
         for i in range(T_h):
             det = det*Sigma[i,i]
         det = det**2
-        cache[key] = {
-           'Sigma':Sigma,
-           'det':det,
-           'count':0
-        }
+        if use_cache:
+            cache[key] = {
+               'Sigma':Sigma,
+               'det':det,
+               'count':0
+            }
     # tmp = endog
     dcopy(&T_h, &endog[0], &inc, &tmp[0], &inc)
     # Solve the linear system
