@@ -12,7 +12,7 @@ function [y, gamma, rho, accept, cache] = sample(       ...
     % 2. Metropolis step: draw gamma and rho
 
     % Get the acceptance probability
-    if gamma_rvs > 0
+    if gamma_rvs > 1
         gamma_star = draw_gamma(gamma, gamma_rvs);
         [prob_accept, cache] = calculate_accept(y, exog, M0, gamma, ...
                                                 gamma_star, sigma2, cache);
