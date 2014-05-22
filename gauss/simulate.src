@@ -1,0 +1,33 @@
+#include estimation.src
+
+rndseed 1234;
+
+// Model Parameters
+lag_ = 1;
+delta = 3;
+sigma2 = 10;
+
+// Data
+{endog, exog} = get_data(lag_, delta);
+
+// Parameters
+G0 = 100;
+G = 100;
+
+start_time = date;  // timing
+
+// Iterate
+{ys, gammas, rhos, accepts} = mh(exog, endog, G0, G, sigma2);
+
+end_time = date; // timing
+elapsed = ethsec(start_time,end_time)/100;
+
+minutes = floor(elapsed / 60);
+seconds = elapsed % 60;
+
+format /m1 /rd 2,2;
+print "Runtime of " minutes " minutes and " seconds " seconds";
+print "Number of draws to convergence: " G0;
+print "Number of draws after convergence: " G;
+print "Prior VC matrix for model parameters is: " sigma2;
+print "Average Model Size: " meanc(sumc(gammas));

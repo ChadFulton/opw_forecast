@@ -1,0 +1,21 @@
+proc (1) truncnormrnd(N, mu, sig, xlo, xhi);
+    // see https://groups.google.com/forum/#!topic/comp.soft-sys.matlab/_WXo4FhVP4g
+    local plo, phi, r, z;
+
+    plo = cdfn((xlo - mu) / sig);
+    phi = cdfn((xhi - mu) / sig);
+
+    // generate uniform [0,1] random deviates
+    r = rndu(N, 1);
+
+    // scale to [plo,phi]
+    r = plo + (phi - plo) * r;
+
+    // Invert through standard normal
+    z = cdfni(r);
+
+    // apply shift and scale
+    z = mu + z * sig;
+
+    retp(z);
+endp;

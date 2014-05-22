@@ -1,0 +1,272 @@
+#include truncnormrnd.src
+
+proc (1) shift(x, s);
+    retp(shiftr(x', s, 0/0)');
+endp;
+
+proc (1) growth_rate(data, delta);
+    retp((data ./ shift(data, delta) - 1)*100)
+endp;
+
+proc (2) get_data(lag_, delta);
+    local data, T, K, sp500_return, term_spread, agg_emp_growth, agg_ip_growth,
+          state_columns, growth_columns, endog, exog;
+
+    load data[618,58] = "recession probit data.csv";
+
+    T = rows(data);
+    K = cols(data);
+
+    sp500_return   = growth_rate(data[., 4], 3);
+    term_spread    = data[., 5] - data[., 6];
+    agg_emp_growth = growth_rate(data[., 7], 3);
+    agg_ip_growth  = growth_rate(data[., 8], 3);
+    state_columns  = growth_rate(data[., 9:K], 3);
+
+    growth_columns = shift(
+        (agg_emp_growth ~ agg_ip_growth ~ state_columns), 1
+    );
+
+    endog = data[delta+lag_+2:T, 2];
+    exog = (
+        ones(T, 1) ~ data[., 3] ~ sp500_return ~  term_spread ~ growth_columns
+    )[delta+2:T-lag_, .];
+
+    retp(endog, exog);
+endp;
+
+proc (1) draw_gamma(gamma, rvs);
+    local gamma_star;
+    
+    gamma_star = gamma;
+
+    if rvs > 1;
+        if gamma_star[rvs] == 1;
+            gamma_star[rvs] = 0;
+        else;
+            gamma_star[rvs] = 1;
+        endif;
+    endif;
+
+    retp(gamma_star);
+endp;
+
+proc (1) draw_rho(M0, y, exog, rvs);
+    local M1, m_1, A, rho;
+    
+    M1 = inv(M0 + exog' * exog);
+    m_1 = M1 * exog' * y;
+    A = chol(M1)';
+    rho = m_1 + A * rvs;
+
+    retp(rho);
+endp;
+
+proc (1) ln_mvn_density(M0, sigma2, y, exog);
+    local Sigma, A, determinant, res, density;
+
+    Sigma = inv(M0 + sigma2 * (exog * exog'));
+    determinant = 1/det(Sigma);
+
+    density = -0.5 * ln(determinant) - 0.5 * y' * Sigma * y;
+
+    retp(density);
+endp;
+
+proc (1) ln_mvn_density_ch(M0, sigma2, y, exog);
+    local Sigma, A, log_determinant, res, density;
+
+    Sigma = M0 + sigma2 * (exog * exog');
+
+    A = chol(Sigma);
+    log_determinant = 2*sumc(ln(diag(A)));
+
+    res = qrtsol(y, A');
+
+    density = -0.5 * log_determinant - 0.5 * (res' * res);
+
+    retp(density);
+endp;
+
+proc (1) ln_nchoosek(n, k);
+    retp(lnfact(n) - lnfact(k) - lnfact(n-k));
+endp;
+
+proc (1) ln_mn_mass(gamma);
+    retp(-ln_nchoosek(rows(gamma), sumc(gamma)));
+endp;
+
+proc (1) draw_y(rho, endog, exog, rvs);
+    local T_, I_, max_iter, xB, y, t, i, j, rvs_;
+
+    T_ = rows(exog);
+    I_ = cols(rvs);
+    max_iter = I_*3
+
+    xB = exog * rho;
+    y = rvs[., 1] + xB;
+
+    for t(1,T_,1);
+        i = 1;
+        j = 1;
+        if endog[t] == 1 and y[t] < 0;
+            rvs_ = rvs[t, .];
+            do while y[t] < 0;
+                // Increment
+                i = i + 1;
+                j = j + 1;
+                // If we're not moving, just draw from the truncated normal
+                if j > max_iter;
+                //     y(t) = stats.truncnorm.rvs(-xB(t), inf, loc=xB(t))
+                    y[t] = truncnormrnd(1, xB[t], 1, 0, 1/0);
+                    continue;
+                endif;
+                // Make sure we have enough variates
+                if i == I_;
+                    rvs_ = rndn(I_, 1);
+                    i = 1;
+                endif;
+                // Set new value
+                y[t] = xB[t] + rvs_[i];
+            endo;
+        elseif endog[t] == 0 and y[t] > 0;
+            rvs_ = rvs[t, .];
+            do while y[t] > 0;
+                // Increment
+                i = i + 1;
+                j = j + 1;
+                // If we're not moving, just draw from the truncated normal
+                if j > max_iter;
+                //     y(t) = stats.truncnorm.rvs(-inf, -xB(t), loc=xB(t))
+                    y[t] = truncnormrnd(1, xB[t], 1, -1/0, 0);
+                    continue;
+                endif;
+                // Make sure we have enough variates
+                if i == I_;
+                    rvs_ = rndn(I_, 1);
+                    i = 1;
+                endif;
+                // Set new value
+                y[t] = xB[t] + rvs_[i];
+            endo;
+        endif;
+    endfor;
+
+    retp(y);
+endp;
+
+proc (1) draw_rvs_comparators(iterations);
+    retp(rndu(iterations, 1));
+endp;
+
+proc (1) draw_rvs_rho(n, iterations);
+    retp(rndn(iterations, n)');
+endp;
+
+proc (1) draw_rvs_gamma(n, iterations);
+    retp(ceil(rndu(iterations, 1) * n));
+endp;
+
+proc (1) draw_rvs_y(T, I);
+    retp(rndn(T, I));
+endp;
+
+proc (1) selcif(data, sel);
+    retp(selif(data', sel)');
+endp;
+
+proc (1) calculate_accept(y, exog, M0, gamma, gamma_star, sigma2);
+    local K, denom, numer;
+    K = rows(gamma);
+
+    denom = ln_mn_mass(gamma[2:K]) + ln_mvn_density_ch(M0, sigma2, y, selcif(exog, gamma));
+    numer = ln_mn_mass(gamma_star[2:K]) + ln_mvn_density_ch(M0, sigma2, y, selcif(exog, gamma_star));
+    
+    retp(exp(numer - denom));
+endp;
+
+proc (1) idxif(sel);
+    retp(selif(seqa(1,1,rows(sel)), sel));
+endp;
+
+proc (4) sample(exog, endog, M0, M0s, rho, gamma, y_rvs, gamma_rvs, rho_rvs, comparator, sigma2);
+    local y, gamma_star, prob_accept, accept, k_gamma;
+
+    // 1. Gibbs step: draw y
+    y = draw_y(
+        selif(rho, gamma), endog,
+        selcif(exog, gamma), y_rvs
+    );
+
+    // 2. Metropolis step: draw gamma and rho
+
+    // Get the acceptance probability
+    if gamma_rvs > 1;
+        gamma_star = draw_gamma(gamma, gamma_rvs);
+        prob_accept = calculate_accept(y, exog, M0, gamma, gamma_star, sigma2);
+    else;
+        gamma_star = gamma;
+        prob_accept = 1;
+    endif;
+
+    // Update the arrays based on acceptance or not
+    accept = prob_accept >= comparator;
+    if accept;
+        rho = zeros(rows(rho), cols(rho));
+        gamma = gamma_star;
+        // Draw rho
+        k_gamma = sumc(gamma);
+        rho[idxif(gamma)] = draw_rho(
+            M0s[1:k_gamma, 1:k_gamma],
+            y, selcif(exog, gamma),
+            rho_rvs[1:k_gamma]
+        );
+    endif;
+
+    retp(y, gamma, rho, accept);
+endp;
+
+proc (4) mh(exog, endog, G0, G, sigma2);
+    local T_, n, iterations, I, N_, M0, M0s, gammas, rhos, ys, accepts,
+          comparators, gamma_rvs, rho_rvs, y_rvs;
+
+    // Parameters
+    T_ = rows(exog);
+    n = cols(exog);
+    iterations = G0 + G + 1;
+    I = 20;   // controls shape of y_rvs
+    // N_ = 1;  // controls number of periods y_rvs is drawn for
+
+    // Cached arrays
+    M0  = eye(T_);
+    M0s = M0 / sigma2;
+
+    // Data arrays
+    gammas  = zeros(n, iterations);
+    rhos    = zeros(n, iterations);
+    ys      = zeros(T_, iterations);
+    accepts = zeros(iterations, 1);
+    gammas[1, .] = 1;
+
+    // Random variates
+    comparators = draw_rvs_comparators(iterations);
+    gamma_rvs = draw_rvs_gamma(n, iterations);
+    rho_rvs = draw_rvs_rho(n, iterations);
+
+    // MH
+    for t(2,iterations,1);
+        // Conserve memory by drawing only y_rvs for N periods at a time
+        //l = mod(t-1, N_);
+        //if l == 1
+        y_rvs = draw_rvs_y(T_, I);
+        //end
+        
+        // Draw a Sample
+        { ys[., t], gammas[., t], rhos[., t], accepts[t] } = sample(
+            exog, endog, M0, M0s, rhos[., t-1], gammas[., t-1],
+            y_rvs, gamma_rvs[t-1], rho_rvs[., t-1],
+            comparators[t-1], sigma2);
+    endfor;
+
+    retp(ys, gammas, rhos, accepts);
+endp;
