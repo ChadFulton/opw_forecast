@@ -7,7 +7,8 @@
 MODULE estimation
     IMPLICIT NONE
 
-    integer :: seed = 1234567898
+    integer :: seed = 123456789
+    real(8), dimension(:,:), allocatable :: cache_numer, cache_denom
 
 CONTAINS
 
@@ -166,13 +167,15 @@ CONTAINS
         RETURN
     END FUNCTION draw_rho
 
-    real(8) FUNCTION ln_mvn_density(M0, sigma2, y, exog)
+    real(8) FUNCTION ln_mvn_density(M0, sigma2, y, exog, use_cache, cache)
         IMPLICIT NONE
 
         real(8), dimension(:,:), intent(in) :: M0
         real(8),                 intent(in) :: sigma2
         real(8), dimension(:),   intent(in) :: y
         real(8), dimension(:,:), intent(in) :: exog
+        logical,                 intent(in) :: use_cache
+        real(8), dimension(:,:), intent(inout) :: cache
 
         real(8), dimension(:,:), allocatable :: Sigma
         real(8), dimension(:), allocatable   :: tmp
@@ -188,12 +191,18 @@ CONTAINS
         ALLOCATE(Sigma(N,N))
         ALLOCATE(tmp(N))
 
-        ! Sigma = M0 + sigma2 * (exog * exog');
-        Sigma = M0
-        CALL dgemm("N", "T", N, N, K, sigma2, exog, N, exog, N, alpha, Sigma, N)
+        IF (use_cache) THEN
+            Sigma = cache
+        ELSE
+            ! Sigma = M0 + sigma2 * (exog * exog');
+            Sigma = M0
+            CALL dgemm("N", "T", N, N, K, sigma2, exog, N, exog, N, alpha, Sigma, N)
 
-        ! Sigma = chol(Sigma);
-        CALL dpotrf("L", N, Sigma, N, info)
+            ! Sigma = chol(Sigma);
+            CALL dpotrf("L", N, Sigma, N, info)
+
+            cache = Sigma
+        END IF
 
         ! det = det(Sigma)
         log_det = 0.
@@ -294,7 +303,8 @@ CONTAINS
         RETURN
     END SUBROUTINE draw_y
 
-    real(8) FUNCTION calculate_accept(y, exog, M0, gamma, gamma_star, sigma2)
+    real(8) FUNCTION calculate_accept(y, exog, M0, gamma, gamma_star, sigma2, &
+                                      use_numer_cache, use_denom_cache)
         IMPLICIT NONE
         real(8), dimension(:),   intent(in) :: y
         real(8), dimension(:,:), intent(in) :: exog
@@ -302,6 +312,8 @@ CONTAINS
         integer, dimension(:),   intent(in) :: gamma
         integer, dimension(:),   intent(in) :: gamma_star
         real(8),                 intent(in) :: sigma2
+        logical,                 intent(in) :: use_numer_cache
+        logical,                 intent(in) :: use_denom_cache
 
         integer, dimension(:), allocatable   :: idx
         real(8), dimension(:,:), allocatable :: exog_numer
@@ -326,8 +338,10 @@ CONTAINS
         exog_numer = exog(:, idx)
         DEALLOCATE(idx)
 
-        denom = ln_mn_mass(gamma(2:)) + ln_mvn_density(M0, sigma2, y, exog_denom)
-        numer = ln_mn_mass(gamma_star(2:)) + ln_mvn_density(M0, sigma2, y, exog_numer)
+        denom = ln_mn_mass(gamma(2:))                                        &
+                + ln_mvn_density(M0, sigma2, y, exog_denom, use_denom_cache, cache_denom)
+        numer = ln_mn_mass(gamma_star(2:))                                   &
+                + ln_mvn_density(M0, sigma2, y, exog_numer, use_numer_cache, cache_numer)
 
         calculate_accept = exp(numer - denom)
 
@@ -353,6 +367,8 @@ CONTAINS
         integer, dimension(:), allocatable :: gamma_star
         real(8), dimension(:), allocatable :: rho_star
         integer, dimension(:), allocatable :: idx
+
+        logical :: use_numer_cache = .false., use_denom_cache = .false.
 
         integer, dimension(2) :: exog_shape
         integer :: N, K, gamma_rvs
@@ -380,8 +396,10 @@ CONTAINS
 
         IF (gamma_rvs > 1) THEN
             CALL draw_gamma(gamma, gamma_rvs, gamma_star)
-            prob_accept = calculate_accept(y, exog, M0, gamma, gamma_star, sigma2)
-            !prob_accept = 0.5
+            prob_accept = calculate_accept(                                  &
+                y, exog, M0, gamma, gamma_star, sigma2,                      &
+                use_numer_cache, use_denom_cache                             &
+            )
         ELSE
             gamma_star = gamma
             prob_accept = 1
@@ -391,6 +409,10 @@ CONTAINS
         accept = prob_accept >= r
 
         IF (accept) THEN
+            ! If we accept, then the old numer becomes the new denom
+            cache_denom = cache_numer
+            use_denom_cache = .true.
+
             gamma = gamma_star
             CALL get_indices(gamma, idx)
 
@@ -398,6 +420,9 @@ CONTAINS
             rho(idx) = draw_rho(M0, y, exog(:, idx), sigma2)
 
             DEALLOCATE(idx)
+        ELSE
+            ! If we do not accept, then the old denom is the new denom
+            use_denom_cache = .true.
         ENDIF
 
         DEALLOCATE(gamma_star)
@@ -425,6 +450,8 @@ CONTAINS
         iterations = ys_shape(2)
 
         ALLOCATE(M0(N, N))
+        ALLOCATE(cache_numer(N, N))
+        ALLOCATE(cache_denom(N, N))
         
         M0 = 0.
         DO t=1,N
@@ -437,6 +464,8 @@ CONTAINS
             CALL sample(exog, endog, M0, sigma2, ys(:,t), accepts(t), gammas(:, t), rhos(:,t))
         END DO
 
+        DEALLOCATE(cache_denom)
+        DEALLOCATE(cache_numer)
         DEALLOCATE(M0)
 
         RETURN
@@ -479,8 +508,8 @@ PROGRAM simulate
     ! Parameters
     N = exog_shape(1)
     K = exog_shape(2)
-    G0 = 200
-    G = 200
+    G0 = 20000
+    G = 20000
     iterations = G0 + G + 1
 
     ! Allocate the data arrays
@@ -512,6 +541,10 @@ PROGRAM simulate
     WRITE(*,*) "Number of draws after convergence: ", G
     WRITE(*,*) "Prior VC matrix for model parameters is: ", sigma2
     WRITE(*,*) "Average Model Size: ", real(SUM(gammas(:,2:))) / real(iterations-1)
+
+    DO i=1,K
+        WRITE(*,*) SUM(rhos(i,2:)) / (G0 + G), SUM(rhos(i,G0+1:)) / G
+    END DO
 
 END PROGRAM simulate
 
