@@ -490,7 +490,7 @@ PROGRAM simulate
 
     integer, dimension(:), allocatable :: seq
     integer :: M, i, N, K, G0, G, iterations
-    integer :: start_time, end_time
+    integer :: start_time, end_time, clock_rate
     real(8) :: elapsed, minutes, seconds
 
     ! Seed for uniform random draws
@@ -525,12 +525,13 @@ PROGRAM simulate
     gammas(1,:) = 1
 
     ! Run Metropolis-Hastings
-    CALL system_clock(start_time)
+    CALL SYSTEM_CLOCK(COUNT_RATE=clock_rate)
+    CALL SYSTEM_CLOCK(COUNT=start_time)
     CALL mh(exog, endog, sigma2, ys, gammas, rhos, accepts)
-    CALL system_clock(end_time)
+    CALL SYSTEM_CLOCK(COUNT=end_time)
 
     ! Timing
-    elapsed = real(end_time - start_time) / 1000
+    elapsed = real((end_time - start_time) / clock_rate)
     minutes = int(elapsed) / 60
     seconds = MOD(elapsed, 60.)
 
@@ -541,9 +542,9 @@ PROGRAM simulate
     WRITE(*,*) "Prior VC matrix for model parameters is: ", sigma2
     WRITE(*,*) "Average Model Size: ", real(SUM(gammas(:,2:))) / real(iterations-1)
 
-    DO i=1,K
-        WRITE(*,*) SUM(rhos(i,2:)) / (G0 + G), SUM(rhos(i,G0+1:)) / G
-    END DO
+    !DO i=1,K
+    !    WRITE(*,*) SUM(rhos(i,2:)) / (G0 + G), SUM(rhos(i,G0+1:)) / G
+    !END DO
 
 END PROGRAM simulate
 
