@@ -28,9 +28,8 @@ CONTAINS
         OPEN(unit=10, file="recession probit data.csv", status="old",            &
             action="read", position="rewind", iostat=fst)
         ! Read the lines into an array
-        DO
+        DO t=1,618
             READ(10, "(58f12.3)", iostat=rdst) raw(t, :)
-            t = t + 1
             
             IF (rdst > 0) STOP "read error"
             IF (rdst < 0) EXIT
@@ -327,8 +326,8 @@ CONTAINS
         N = exog_shape(1)
         K = exog_shape(2)
 
-        ALLOCATE(exog_numer(N,SUM(gamma)))
-        ALLOCATE(exog_denom(N,SUM(gamma_star)))
+        ALLOCATE(exog_numer(N,SUM(gamma_star)))
+        ALLOCATE(exog_denom(N,SUM(gamma)))
 
         CALL get_indices(gamma, idx)
         exog_denom = exog(:, idx)
