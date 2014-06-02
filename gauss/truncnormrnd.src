@@ -1,4 +1,4 @@
-proc (1) truncnormrnd(N, mu, sig, xlo, xhi);
+proc truncnormrnd(N, mu, sig, xlo, xhi);
     // see https://groups.google.com/forum/#!topic/comp.soft-sys.matlab/_WXo4FhVP4g
     local plo, phi, r, z;
 

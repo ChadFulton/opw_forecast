@@ -1,14 +1,14 @@
 #include truncnormrnd.src
 
-proc (1) shift(x, s);
+proc shift(x, s);
     retp(shiftr(x', s, 0/0)');
 endp;
 
-proc (1) growth_rate(data, delta);
-    retp((data ./ shift(data, delta) - 1)*100)
+proc growth_rate(data, delta);
+    retp((data ./ shift(data, delta) - 1)*100);
 endp;
 
-proc (2) get_data(lag_, delta);
+proc (2) = get_data(lag_, delta);
     local data, T, K, sp500_return, term_spread, agg_emp_growth, agg_ip_growth,
           state_columns, growth_columns, endog, exog;
 
@@ -28,17 +28,17 @@ proc (2) get_data(lag_, delta);
     );
 
     endog = data[delta+lag_+2:T, 2];
-    exog = (
-        ones(T, 1) ~ data[., 3] ~ sp500_return ~  term_spread ~ growth_columns
-    )[delta+2:T-lag_, .];
+    exog = ones(T, 1) ~ data[., 3] ~ sp500_return ~  term_spread ~ growth_columns;
+    exog = exog[delta+2:T-lag_, .];
 
     retp(endog, exog);
 endp;
 
-proc (1) draw_gamma(gamma, rvs);
+
+proc draw_gamma(gamma_, rvs);
     local gamma_star;
     
-    gamma_star = gamma;
+    gamma_star = gamma_;
 
     if rvs > 1;
         if gamma_star[rvs] == 1;
@@ -51,7 +51,8 @@ proc (1) draw_gamma(gamma, rvs);
     retp(gamma_star);
 endp;
 
-proc (1) draw_rho(M0, y, exog, rvs);
+
+proc draw_rho(M0, y, exog, rvs);
     local M1, m_1, A, rho;
     
     M1 = inv(M0 + exog' * exog);
@@ -62,7 +63,7 @@ proc (1) draw_rho(M0, y, exog, rvs);
     retp(rho);
 endp;
 
-proc (1) ln_mvn_density(M0, sigma2, y, exog);
+proc ln_mvn_density(M0, sigma2, y, exog);
     local Sigma, A, determinant, res, density;
 
     Sigma = inv(M0 + sigma2 * (exog * exog'));
@@ -73,7 +74,7 @@ proc (1) ln_mvn_density(M0, sigma2, y, exog);
     retp(density);
 endp;
 
-proc (1) ln_mvn_density_ch(M0, sigma2, y, exog);
+proc ln_mvn_density_ch(M0, sigma2, y, exog);
     local Sigma, A, log_determinant, res, density;
 
     Sigma = M0 + sigma2 * (exog * exog');
@@ -88,20 +89,20 @@ proc (1) ln_mvn_density_ch(M0, sigma2, y, exog);
     retp(density);
 endp;
 
-proc (1) ln_nchoosek(n, k);
+proc ln_nchoosek(n, k);
     retp(lnfact(n) - lnfact(k) - lnfact(n-k));
 endp;
 
-proc (1) ln_mn_mass(gamma);
-    retp(-ln_nchoosek(rows(gamma), sumc(gamma)));
+proc ln_mn_mass(gamma_);
+    retp(-ln_nchoosek(rows(gamma_), sumc(gamma_)));
 endp;
 
-proc (1) draw_y(rho, endog, exog, rvs);
+proc draw_y(rho, endog, exog, rvs);
     local T_, I_, max_iter, xB, y, t, i, j, rvs_;
 
     T_ = rows(exog);
     I_ = cols(rvs);
-    max_iter = I_*3
+    max_iter = I_ * 3;
 
     xB = exog * rho;
     y = rvs[., 1] + xB;
@@ -155,57 +156,60 @@ proc (1) draw_y(rho, endog, exog, rvs);
     retp(y);
 endp;
 
-proc (1) draw_rvs_comparators(iterations);
+proc draw_rvs_comparators(iterations);
     retp(rndu(iterations, 1));
 endp;
 
-proc (1) draw_rvs_rho(n, iterations);
+proc draw_rvs_rho(n, iterations);
     retp(rndn(iterations, n)');
 endp;
 
-proc (1) draw_rvs_gamma(n, iterations);
+proc draw_rvs_gamma(n, iterations);
     retp(ceil(rndu(iterations, 1) * n));
 endp;
 
-proc (1) draw_rvs_y(T, I);
+proc draw_rvs_y(T, I);
     retp(rndn(T, I));
 endp;
 
-proc (1) selcif(data, sel);
+proc selcif(data, sel);
     retp(selif(data', sel)');
 endp;
 
-proc (1) calculate_accept(y, exog, M0, gamma, gamma_star, sigma2);
-    local K, denom, numer;
-    K = rows(gamma);
+proc calculate_accept(y, exog, M0, gamma_, gamma_star, sigma2);
+    local K, gamma_mass, gamma_star_mass, exog_denom, exog_numer, denom, numer;
+    K = rows(gamma_);
+    
+    exog_denom = selcif(exog, gamma_);
+    exog_numer = selcif(exog, gamma_star);
 
-    denom = ln_mn_mass(gamma[2:K]) + ln_mvn_density_ch(M0, sigma2, y, selcif(exog, gamma));
-    numer = ln_mn_mass(gamma_star[2:K]) + ln_mvn_density_ch(M0, sigma2, y, selcif(exog, gamma_star));
+    denom = ln_mn_mass(gamma_[2:K]) + ln_mvn_density_ch(M0, sigma2, y, exog_denom);
+    numer = ln_mn_mass(gamma_star[2:K]) + ln_mvn_density_ch(M0, sigma2, y, exog_numer);
     
     retp(exp(numer - denom));
 endp;
 
-proc (1) idxif(sel);
+proc idxif(sel);
     retp(selif(seqa(1,1,rows(sel)), sel));
 endp;
 
-proc (4) sample(exog, endog, M0, M0s, rho, gamma, y_rvs, gamma_rvs, rho_rvs, comparator, sigma2);
+proc (4) = sample(exog, endog, M0, M0s, rho, gamma_, y_rvs, gamma_rvs, rho_rvs, comparator, sigma2);
     local y, gamma_star, prob_accept, accept, k_gamma;
 
     // 1. Gibbs step: draw y
     y = draw_y(
-        selif(rho, gamma), endog,
-        selcif(exog, gamma), y_rvs
+        selif(rho, gamma_), endog,
+        selcif(exog, gamma_), y_rvs
     );
 
     // 2. Metropolis step: draw gamma and rho
 
     // Get the acceptance probability
     if gamma_rvs > 1;
-        gamma_star = draw_gamma(gamma, gamma_rvs);
-        prob_accept = calculate_accept(y, exog, M0, gamma, gamma_star, sigma2);
+        gamma_star = draw_gamma(gamma_, gamma_rvs);
+        prob_accept = calculate_accept(y, exog, M0, gamma_, gamma_star, sigma2);
     else;
-        gamma_star = gamma;
+        gamma_star = gamma_;
         prob_accept = 1;
     endif;
 
@@ -213,20 +217,20 @@ proc (4) sample(exog, endog, M0, M0s, rho, gamma, y_rvs, gamma_rvs, rho_rvs, com
     accept = prob_accept >= comparator;
     if accept;
         rho = zeros(rows(rho), cols(rho));
-        gamma = gamma_star;
+        gamma_ = gamma_star;
         // Draw rho
-        k_gamma = sumc(gamma);
-        rho[idxif(gamma)] = draw_rho(
+        k_gamma = sumc(gamma_);
+        rho[idxif(gamma_)] = draw_rho(
             M0s[1:k_gamma, 1:k_gamma],
-            y, selcif(exog, gamma),
+            y, selcif(exog, gamma_),
             rho_rvs[1:k_gamma]
         );
     endif;
 
-    retp(y, gamma, rho, accept);
+    retp(y, gamma_, rho, accept);
 endp;
 
-proc (4) mh(exog, endog, G0, G, sigma2);
+proc (4) = mh(exog, endog, G0, G, sigma2);
     local T_, n, iterations, I, N_, M0, M0s, gammas, rhos, ys, accepts,
           comparators, gamma_rvs, rho_rvs, y_rvs;
 
@@ -246,7 +250,7 @@ proc (4) mh(exog, endog, G0, G, sigma2);
     rhos    = zeros(n, iterations);
     ys      = zeros(T_, iterations);
     accepts = zeros(iterations, 1);
-    gammas[1, .] = 1;
+    gammas[1, .] = ones(1,iterations);
 
     // Random variates
     comparators = draw_rvs_comparators(iterations);
@@ -270,3 +274,4 @@ proc (4) mh(exog, endog, G0, G, sigma2);
 
     retp(ys, gammas, rhos, accepts);
 endp;
+
