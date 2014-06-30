@@ -6,7 +6,8 @@ from Cython.Build import cythonize
 from numpy.distutils.system_info import get_info
 
 ext_modules = [
-    Extension("simulate", ["simulate.pyx"])
+    Extension("simulate", ["simulate.pyx"]),
+    Extension("cyestimation", ["cyestimation.pyx"])
 ]
 
 setup(
