@@ -1,3 +1,7 @@
+#cython: boundscheck=False
+#cython: wraparound=False
+#cython: cdivision=False
+
 import numpy as np
 from scipy.misc import comb
 from scipy import stats
@@ -22,6 +26,8 @@ cdef dcopy_t *dcopy = <dcopy_t*>PyCObject_AsVoidPtr(scipy.linalg.blas.dcopy._cpo
 cdef daxpy_t *daxpy = <daxpy_t*>PyCObject_AsVoidPtr(scipy.linalg.blas.daxpy._cpointer)
 cdef ddot_t *ddot = <ddot_t*>PyCObject_AsVoidPtr(scipy.linalg.blas.ddot._cpointer)
 cdef dtrtrs_t *dtrtrs = <dtrtrs_t*>PyCObject_AsVoidPtr(scipy.linalg.lapack.dtrtrs._cpointer)
+cdef dsyrk_t *dsyrk = <dsyrk_t*>PyCObject_AsVoidPtr(scipy.linalg.blas.dsyrk._cpointer)
+cdef dpotrs_t *dpotrs = <dpotrs_t*>PyCObject_AsVoidPtr(scipy.linalg.lapack.dpotrs._cpointer)
 cdef dgetrf_t *dgetrf = <dgetrf_t*>PyCObject_AsVoidPtr(scipy.linalg.lapack.dgetrf._cpointer)
 cdef dgetri_t *dgetri = <dgetri_t*>PyCObject_AsVoidPtr(scipy.linalg.lapack.dgetri._cpointer)
 cdef dpotrf_t *dpotrf = <dpotrf_t*>PyCObject_AsVoidPtr(scipy.linalg.lapack.dpotrf._cpointer)
@@ -358,18 +364,26 @@ cpdef ln_mvn_density_ch(double [::1, :] M0,   # T-h x T-h
     #work = np.empty((lwork,lwork), float, order="F")
     ipiv = np.zeros((T_h,T_h), np.int32, order="F")
 
-    # Sigma = M0
-    dcopy(&T_h2, &M0[0,0], &inc, &Sigma[0,0], &inc)
+    # # Sigma = M0
+    # dcopy(&T_h2, &M0[0,0], &inc, &Sigma[0,0], &inc)
 
-    # Sigma = (np.eye(exog.shape[0]) + sigma2*exog.dot(exog.T))/sigma2
-    #       = Sigma + sigma2*exog.dot(exog.T)
-    dgemm("N", "T", &T_h, &T_h, &k_gamma, &sigma2, &exog[0,0], &T_h, &exog[0,0], &T_h, &alpha, &Sigma[0,0], &T_h)
+    # # Sigma = (np.eye(exog.shape[0]) + sigma2*exog.dot(exog.T))/sigma2
+    # #       = Sigma + sigma2*exog.dot(exog.T)
+    # dgemm("N", "T", &T_h, &T_h, &k_gamma, &sigma2, &exog[0,0], &T_h, &exog[0,0], &T_h, &alpha, &Sigma[0,0], &T_h)
     
     if use_cache and key in cache:
         Sigma = cache[key]['Sigma']
         det = cache[key]['det']
         cache[key]['count'] += 1
     else:
+        # Sigma = M0
+        dcopy(&T_h2, &M0[0,0], &inc, &Sigma[0,0], &inc)
+
+        # Sigma = (np.eye(exog.shape[0]) + sigma2*exog.dot(exog.T))/sigma2
+        #       = Sigma + sigma2*exog.dot(exog.T)
+        #dgemm("N", "T", &T_h, &T_h, &k_gamma, &sigma2, &exog[0,0], &T_h, &exog[0,0], &T_h, &alpha, &Sigma[0,0], &T_h)
+        dsyrk("L", "N", &T_h, &k_gamma, &sigma2, &exog[0,0], &T_h, &alpha, &Sigma[0,0], &T_h)
+
         # Cholesky decomposition
         dpotrf("L", &T_h, &Sigma[0,0], &T_h, &info)
         for i in range(T_h):
@@ -390,6 +404,7 @@ cpdef ln_mvn_density_ch(double [::1, :] M0,   # T-h x T-h
     dcopy(&T_h, &endog[0], &inc, &tmp[0], &inc)
     # Solve the linear system
     dtrtrs('L', 'N', 'N', &T_h, &inc, &Sigma[0,0], &T_h, &tmp[0], &T_h, &info)
+    #dpotrs('L', &T_h, &inc, &Sigma[0,0], &T_h, &tmp[0], &T_h, &info)
     
     return - 0.5*log(det) - 0.5*ddot(&T_h, &tmp[0], &inc, &tmp[0], &inc)
 
